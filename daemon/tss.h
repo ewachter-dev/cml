@@ -45,6 +45,8 @@ tss_init(void);
 void
 tss_cleanup(void);
 
+void tss_clear(void);
+
 void
 tss_ml_append(char *filename, uint8_t *filehash, int filehash_len, tss_hash_algo_t hashalgo);
 
