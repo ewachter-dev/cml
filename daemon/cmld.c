@@ -1969,6 +1969,19 @@ cmld_wipe_device()
 		reboot_reboot(POWER_OFF);
 }
 
+void
+cmld_destroy_system()
+{
+	dir_delete_folder(cmld_path, CMLD_PATH_GUESTOS_DIR);
+	dir_delete_folder(cmld_path, CMLD_PATH_CONTAINERS_DIR);
+	dir_delete_folder(cmld_path, CMLD_PATH_CONTAINER_KEYS_DIR);
+	dir_delete_folder(cmld_path, CMLD_PATH_CONTAINER_TOKENS_DIR);
+	dir_delete_folder(LOGFILE_DIR, "");
+	tss_clear();
+	if (!cmld_hostedmode)
+		reboot_reboot(REBOOT);
+}
+
 const char *
 cmld_get_c0os(void)
 {
