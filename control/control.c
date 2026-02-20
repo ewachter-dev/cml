@@ -71,7 +71,7 @@ print_usage(const char *cmd)
 	printf("   wipe_device\n"
 	       "        Wipes all containers on the device.\n\n");
 	printf("   destroy_system\n"
-	"        		Wipes all containers on the device and clears the TPM.\n\n");
+	       "        Wipes all containers on the device and clears the TPM.\n\n");
 	printf("   reboot\n"
 	       "        Reboots the whole device, shutting down any containers which are running.\n\n");
 	printf("   set_provisioned\n"
