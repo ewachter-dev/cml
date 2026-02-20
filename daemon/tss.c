@@ -192,7 +192,8 @@ tss_cleanup(void)
 	unit_free(tpm2d_unit);
 }
 
-void tss_clear(void)
+void
+tss_clear(void)
 {
 	IF_TRUE_RETURN(tss_sock < 0);
 
