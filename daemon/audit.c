@@ -770,89 +770,43 @@ audit_cb_kernel_handle_log(int fd, unsigned events, UNUSED event_io_t *io, void 
 	char *buf = mem_new0(char, MAX_AUDIT_MESSAGE_LENGTH);
 	char *log_record = NULL;
 
-	if (events & EVENT_IO_EXCEPT) {
-		goto out;
-	}
-
-	int msg_len;
-	if ((msg_len = nl_msg_receive_kernel(audit_sock, buf, MAX_AUDIT_MESSAGE_LENGTH, false)) <=
-	    0) {
-		WARN("could not read audit meassge.");
-		goto out;
-	}
-
-	struct nlmsghdr *nlmsg = (struct nlmsghdr *)buf;
-	uint16_t type = nlmsg->nlmsg_type;
-
-	if (type == AUDIT_TRUSTED_APP) {
-		log_record = NLMSG_DATA(nlmsg);
-		int uid = -1;
-		int pid = -1;
-		sscanf(log_record, "%*s pid=%d uid=%d %*8970c", &pid, &uid);
-		TRACE("scanned pid=%d, uid=%d", pid, uid);
-		char *record_text = strstr(log_record, "msg='");
-		IF_NULL_GOTO(record_text, out);
-		record_text += 5;
-		// remove closing ' char from msg string
-		int record_text_len = strlen(record_text) - 1;
-		AuditRecord *record = (AuditRecord *)protobuf_message_new_from_buf(
-			(uint8_t *)record_text, record_text_len, &audit_record__descriptor);
-		audit_record_log(cmld_container_get_by_uid(uid), record);
-		protobuf_free_message((ProtobufCMessage *)record);
-		TRACE("audit: type=%d %s", type, log_record);
-	} else if (type == AUDIT_USER || type == AUDIT_LOGIN || type == AUDIT_DM_CTRL ||
-		   (type >= AUDIT_FIRST_USER_MSG && type <= AUDIT_LAST_USER_MSG) ||
-		   (type >= AUDIT_FIRST_USER_MSG2 && type <= AUDIT_LAST_USER_MSG2)) {
-		log_record = NLMSG_DATA(nlmsg);
-		int uid = -1;
-		int pid = -1;
-		sscanf(log_record, "%*s pid=%d uid=%d %*8970c", &pid, &uid);
-		char *res = strstr(log_record, "res=");
-		res = res ? res + 4 : "failed";
-		container_t *c = cmld_container_get_by_uid(uid);
-		c = c ? c : cmld_containers_get_c0();
-
-		const uuid_t *uuid = NULL;
-		const char *uuid_str = NULL;
-		if (c) {
-			uuid = container_get_uuid(c);
-			uuid_str = uuid_string(uuid);
+	if (events & EVENT_IO_READ) {
+		int msg_len;
+		if ((msg_len = nl_msg_receive_kernel(audit_sock, buf, MAX_AUDIT_MESSAGE_LENGTH,
+						     false)) <= 0) {
+			WARN("could not read audit meassge.");
+			goto out;
 		}
 
-		char *record_type = mem_printf("type=%hu", type);
-		audit_log_event(uuid, (strstr(res, "success") || res[0] == '1') ? SSA : FSA, CMLD,
-				KAUDIT, record_type, uuid_str, 2, "msg", log_record, NULL);
-		mem_free0(record_type);
-		TRACE("audit: type=%d %s", type, log_record);
-	} else if (type == AUDIT_DM_EVENT) {
-		log_record = NLMSG_DATA(nlmsg);
-		uuid_t *uuid = NULL;
-		char *dev_file = NULL;
-		char *op_buf = mem_new0(char, MAX_AUDIT_MESSAGE_LENGTH);
-		int dev_major, dev_minor, res;
-		unsigned long long sector;
-		int sscanf_ret =
-			sscanf(log_record, "%*s module=%*s op=%s dev=%d:%d sector=%llu res=%d",
-			       op_buf, &dev_major, &dev_minor, &sector, &res);
-		TRACE("audit: sscanf_ret=%d", sscanf_ret);
-		if (sscanf_ret == 5) {
-			char *dev_name = NULL;
-			char *sector_str = NULL;
-			dev_file = mem_printf("/sys/dev/block/%d:%d/dm/name", dev_major, dev_minor);
-			dev_name = file_read_new(dev_file, MAX_AUDIT_MESSAGE_LENGTH);
-			if (dev_name) {
-				char *dev_name_p;
-				if ((dev_name_p = strchr(dev_name, '\n')) != NULL)
-					*dev_name_p = '\0';
-				char *uuid_str = mem_strndup(dev_name, 36);
-				uuid = uuid_new(uuid_str);
-				TRACE("uuid %s from dev '%s'", uuid_str, dev_file);
-				mem_free0(uuid_str);
-			} else {
-				dev_name = mem_printf("%d:%d", dev_major, dev_minor);
-			}
+		struct nlmsghdr *nlmsg = (struct nlmsghdr *)buf;
+		uint16_t type = nlmsg->nlmsg_type;
 
-			container_t *c = uuid ? cmld_container_get_by_uuid(uuid) : NULL;
+		if (type == AUDIT_TRUSTED_APP) {
+			log_record = NLMSG_DATA(nlmsg);
+			int uid = -1;
+			int pid = -1;
+			sscanf(log_record, "%*s pid=%d uid=%d %*8970c", &pid, &uid);
+			TRACE("scanned pid=%d, uid=%d", pid, uid);
+			char *record_text = strstr(log_record, "msg='");
+			IF_NULL_GOTO(record_text, out);
+			record_text += 5;
+			// remove closing ' char from msg string
+			int record_text_len = strlen(record_text) - 1;
+			AuditRecord *record = (AuditRecord *)protobuf_message_new_from_buf(
+				(uint8_t *)record_text, record_text_len, &audit_record__descriptor);
+			audit_record_log(cmld_container_get_by_uid(uid), record);
+			protobuf_free_message((ProtobufCMessage *)record);
+			TRACE("audit: type=%d %s", type, log_record);
+		} else if (type == AUDIT_USER || type == AUDIT_LOGIN || type == AUDIT_DM_CTRL ||
+			   (type >= AUDIT_FIRST_USER_MSG && type <= AUDIT_LAST_USER_MSG) ||
+			   (type >= AUDIT_FIRST_USER_MSG2 && type <= AUDIT_LAST_USER_MSG2)) {
+			log_record = NLMSG_DATA(nlmsg);
+			int uid = -1;
+			int pid = -1;
+			sscanf(log_record, "%*s pid=%d uid=%d %*8970c", &pid, &uid);
+			char *res = strstr(log_record, "res=");
+			res = res ? res + 4 : "failed";
+			container_t *c = cmld_container_get_by_uid(uid);
 			c = c ? c : cmld_containers_get_c0();
 
 			const uuid_t *uuid = NULL;
@@ -862,24 +816,79 @@ audit_cb_kernel_handle_log(int fd, unsigned events, UNUSED event_io_t *io, void 
 				uuid_str = uuid_string(uuid);
 			}
 
-			sector_str = mem_printf("%llu", sector);
-			audit_log_event(uuid, (res == 1) ? SSA : FSA, CMLD, CONTAINER_MGMT,
-					"dm-audit", uuid_str, 6, "op", op_buf, "label", dev_name,
-					"sector", sector_str, NULL);
+			char *record_type = mem_printf("type=%hu", type);
+			audit_log_event(uuid, (strstr(res, "success") || res[0] == '1') ? SSA : FSA,
+					CMLD, KAUDIT, record_type, uuid_str, 2, "msg", log_record,
+					NULL);
+			mem_free0(record_type);
+			TRACE("audit: type=%d %s", type, log_record);
+		} else if (type == AUDIT_DM_EVENT) {
+			log_record = NLMSG_DATA(nlmsg);
+			uuid_t *uuid = NULL;
+			char *dev_file = NULL;
+			char *op_buf = mem_new0(char, MAX_AUDIT_MESSAGE_LENGTH);
+			int dev_major, dev_minor, res;
+			unsigned long long sector;
+			int sscanf_ret = sscanf(log_record,
+						"%*s module=%*s op=%s dev=%d:%d sector=%llu res=%d",
+						op_buf, &dev_major, &dev_minor, &sector, &res);
+			TRACE("audit: sscanf_ret=%d", sscanf_ret);
+			if (sscanf_ret == 5) {
+				char *dev_name = NULL;
+				char *sector_str = NULL;
+				dev_file = mem_printf("/sys/dev/block/%d:%d/dm/name", dev_major,
+						      dev_minor);
+				dev_name = file_read_new(dev_file, MAX_AUDIT_MESSAGE_LENGTH);
+				if (dev_name) {
+					char *dev_name_p;
+					if ((dev_name_p = strchr(dev_name, '\n')) != NULL)
+						*dev_name_p = '\0';
+					char *uuid_str = mem_strndup(dev_name, 36);
+					uuid = uuid_new(uuid_str);
+					TRACE("uuid %s from dev '%s'", uuid_str, dev_file);
+					mem_free0(uuid_str);
+				} else {
+					dev_name = mem_printf("%d:%d", dev_major, dev_minor);
+				}
 
-			mem_free0(sector_str);
-			mem_free0(dev_name);
+				container_t *c = uuid ? cmld_container_get_by_uuid(uuid) : NULL;
+				c = c ? c : cmld_containers_get_c0();
+
+				const uuid_t *uuid = NULL;
+				const char *uuid_str = NULL;
+				if (c) {
+					uuid = container_get_uuid(c);
+					uuid_str = uuid_string(uuid);
+				}
+
+				sector_str = mem_printf("%llu", sector);
+				audit_log_event(uuid, (res == 1) ? SSA : FSA, CMLD, CONTAINER_MGMT,
+						"dm-audit", uuid_str, 6, "op", op_buf, "label",
+						dev_name, "sector", sector_str, NULL);
+
+				mem_free0(sector_str);
+				mem_free0(dev_name);
+			}
+			mem_free0(op_buf);
+			mem_free0(dev_file);
+			if (uuid)
+				uuid_free(uuid);
+			TRACE("audit: type=%d %s", type, log_record);
+		} else if (type == AUDIT_KERNEL ||
+			   (type >= AUDIT_FIRST_EVENT && type <= AUDIT_INTEGRITY_LAST_MSG)) {
+			log_record = NLMSG_DATA(nlmsg);
+			TRACE("audit: type=%d %s", type, log_record);
 		}
-		mem_free0(op_buf);
-		mem_free0(dev_file);
-		if (uuid)
-			uuid_free(uuid);
-		TRACE("audit: type=%d %s", type, log_record);
-	} else if (type == AUDIT_KERNEL ||
-		   (type >= AUDIT_FIRST_EVENT && type <= AUDIT_INTEGRITY_LAST_MSG)) {
-		log_record = NLMSG_DATA(nlmsg);
-		TRACE("audit: type=%d %s", type, log_record);
 	}
+
+	if (events & EVENT_IO_EXCEPT) {
+		WARN("EVENT_IO_EXCEPT on audit socket %d, draining pending error.", fd);
+		int err = 0;
+		socklen_t errlen = sizeof(err);
+		getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &errlen);
+		WARN("Audit socket error: %s", strerror(err));
+	}
+
 out:
 	mem_free0(buf);
 }
